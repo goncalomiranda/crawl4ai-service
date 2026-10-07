@@ -85,6 +85,62 @@ owners, actual schema of unqualified `crawled_content`, additional relations,
 constraints, and indexes are therefore **unknown**. The application connects
 as `newsletter`; that does not establish the ownership of either relation.
 
+## Backups, restore and migrations
+
+Schema changes are versioned in `migrations/` (yoyo-migrations: numbered
+`NNNN_name.sql` files with optional `NNNN_name.rollback.sql`). Milestone 1
+migrations must be additive only (new tables, nullable columns, indexes);
+`scripts/check_migrations.py` rejects `DROP`, `TRUNCATE`, `DELETE FROM`,
+column drops/renames and type changes in forward migrations. `0001_baseline`
+is idempotent (`IF NOT EXISTS`) and a no-op on production; the column types it
+declares are inferred from application SQL and should be checked against the
+live schema.
+
+Requirements: `yoyo-migrations` (`pip install -r requirements.txt` in the
+virtualenv) and either `postgresql-client` or Docker. Without a local
+`pg_dump`, `scripts/backup-db.sh` runs it from a throwaway
+`postgres:16-alpine` container (`CRAWL4AI_PG_IMAGE`; keep the major version
+equal to or newer than the server's).
+
+**Backup** (before every schema change; reads `CRAWL4AI_DB_*` from the
+environment, or from `CRAWL4AI_ENV_FILE`):
+
+```sh
+CRAWL4AI_ENV_FILE=.env scripts/backup-db.sh        # writes ~/backups/pre-migration-<timestamp>.dump
+```
+
+Dumps are mode `0600`, the newest 10 are kept (`CRAWL4AI_BACKUP_KEEP`), and
+`backups/` and `*.dump` are git-ignored. With a single disk, a backup on the
+same drive does not survive disk failure; copy dumps to another device or
+encrypted remote storage when possible.
+
+**Restore** into a separate scratch database, never over production. With a
+single production server, create it on the same PostgreSQL instance (the role
+needs `CREATEDB`, or use a superuser) and drop it afterwards. If `pg_restore`
+is not installed locally, run these through the PostgreSQL container, e.g.
+`docker exec -i <container> pg_restore ... < dump`:
+
+```sh
+createdb -h <host> -p <port> -U <user> crawl4ai_restore_test
+pg_restore --exit-on-error -h <host> -p <port> -U <user> \
+  -d crawl4ai_restore_test ~/backups/<dump>.dump
+```
+
+Compare row counts of `crawled_content` and `core.crawl_jobs` with the source.
+This procedure was tested on 2026-10-07 against a throwaway PostgreSQL 16
+container: migrate, backup, restore, and identical row counts.
+
+**Migrate** (refuses to run unless a backup newer than
+`CRAWL4AI_BACKUP_MAX_AGE_MIN`, default 60, exists in `CRAWL4AI_BACKUP_DIR`):
+
+```sh
+CRAWL4AI_ENV_FILE=.env scripts/backup-db.sh
+CRAWL4AI_ENV_FILE=.env scripts/migrate.sh
+```
+
+Try new migrations on the restored scratch copy first (point `CRAWL4AI_DB_NAME` at it). Tests:
+`python -m unittest discover -s tests -t .`.
+
 ## HTTP API
 
 The three application routes are confirmed by the running API's OpenAPI

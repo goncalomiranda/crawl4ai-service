@@ -4,3 +4,5 @@
 __pycache__/
 api.log
 logs/
+backups/
+*.dump

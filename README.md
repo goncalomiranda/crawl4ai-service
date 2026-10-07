@@ -18,6 +18,8 @@ A small FastAPI service that wraps [Crawl4AI](https://github.com/unclecode/crawl
 - `service-manager.sh` – install/manage the systemd service
 - `run-dev.sh` – development server with auto-reload
 - `crawler-api.service.template` – systemd unit template
+- `migrations/` – versioned yoyo database migrations
+- `scripts/` – `backup-db.sh`, `migrate.sh`, `migrate.py`, `check_migrations.py`
 - `OPERATIONS.md` – detailed operations notes
 
 ## Requirements
@@ -54,5 +56,7 @@ As a systemd service (reads `/etc/crawl4ai/crawler-api.env`):
 ./service-manager.sh start
 ./service-manager.sh logs
 ```
+
+Backups, restore and migrations: see the *Backups, restore and migrations* section of [OPERATIONS.md](OPERATIONS.md).
 
 See [OPERATIONS.md](OPERATIONS.md) for environment file setup, logs and maintenance.
